@@ -12,12 +12,74 @@ builds, and secrets that end up in logs or `UserDefaults`.
 - Stable JSON output for editors, Git clients and CI.
 - Usable as a Swift library (`SwiftCheckCore`) to run the checks inside other apps — no process, no JSON.
 
-Requirements: macOS 14+, Swift 6.
+Requirements: macOS 14+ on Apple Silicon, Swift 6 (Xcode 16 or later).
+
+## Installation
+
+Pick the way that fits: the plugin for projects, the command-line tool for CI and scripts, the library
+for tools that embed the checks. All of them read the same `.swiftcheck.json` (see
+[Configuration](#configuration)); without one, every rule runs with its default severity.
+
+### Xcode and SwiftPM projects: plugin (recommended)
+
+The plugins live in a separate lightweight package, **SwiftCheckPlugins**. It downloads the prebuilt
+`swiftcheck` binary from this repository's release instead of compiling it, so it adds no build time and
+no swift-syntax dependency to your project.
+
+**Xcode project:** File ▸ Add Package Dependencies…, enter
+`https://github.com/mihranapozyan/SwiftCheckPlugins.git` and add it without linking any product. Then, in
+the app target: Build Phases ▸ Run Build Tool Plug-ins ▸ + ▸ **SwiftCheckBuildToolPlugin**. On the first
+build Xcode asks to trust the plugin — choose Trust & Enable.
+
+**Swift package:**
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/mihranapozyan/SwiftCheckPlugins.git", from: "0.1.0"),
+],
+targets: [
+    .target(
+        name: "MyLibrary",
+        plugins: [.plugin(name: "SwiftCheckBuildToolPlugin", package: "SwiftCheckPlugins")]
+    ),
+]
+```
+
+Every build then checks the target's Swift files: violations show up as warnings and errors on the
+right lines, and an error-severity violation fails the build. The plugin looks for `.swiftcheck.json`
+in the package / project folder and above it, so one configuration can cover a whole repository.
+
+To check on demand, use the command plugin: `swift package swiftcheck` (all targets),
+`swift package swiftcheck --target MyLibrary`, or right-click the project in Xcode's navigator ▸
+SwiftCheck. Options such as `--json`, `--include-baselined` or `--diff main` are passed to the tool.
+
+### Command line (CI, git hooks, scripts)
+
+Download the binary from the latest release:
 
 ```bash
-swift build -c release
-.build/release/swiftcheck --list-rules
+curl -fsSL -o swiftcheck.zip https://github.com/mihranapozyan/SwiftCheck/releases/download/0.1.0/swiftcheck-0.1.0-macos-arm64.zip
+unzip swiftcheck.zip && sudo mv swiftcheck /usr/local/bin/ && rm swiftcheck.zip
+swiftcheck --version
 ```
+
+A zip downloaded with a browser is quarantined by macOS; `curl` avoids that. If macOS blocks the binary,
+run `xattr -d com.apple.quarantine /usr/local/bin/swiftcheck`. Each release also lists a `.sha256`
+checksum for the archive.
+
+Or build it from source: `swift build -c release`, then copy `.build/release/swiftcheck`.
+
+Typical uses:
+
+```bash
+swiftcheck                        # every Swift file under the project root
+swiftcheck --diff origin/main     # only files changed on this branch — for CI
+swiftcheck --update-baseline      # accept existing violations when adopting SwiftCheck
+```
+
+### Library
+
+Add this package and link the `SwiftCheckCore` product — see [Using as a library](#using-as-a-library).
 
 ## Rules
 
@@ -254,6 +316,19 @@ Release build, Apple M5 Max (18 cores), all rules:
 
 The target of 1000 files under 0.5 s holds with a wide margin. Parsing dominates; the rule pass
 itself is a single walk with a dictionary lookup per node.
+
+## Releasing
+
+`scripts/release.sh <version> --plugins ../SwiftCheckPlugins` runs the tests, builds `swiftcheck` for
+arm64, and writes to `dist/`:
+
+- `swiftcheck-<version>-macos-arm64.zip` — the CLI;
+- `SwiftCheckBinary.artifactbundle.zip` — the CLI as a SwiftPM binary target, used by SwiftCheckPlugins;
+- a `.sha256` file for each.
+
+It also generates SwiftCheckPlugins' `Package.swift` with the release URL and checksum. Then: tag and push
+this repository, create the GitHub release with the two archives, and commit, tag and push
+SwiftCheckPlugins with the same version. `SwiftCheck.version` must match the version being released.
 
 ## Architecture
 
