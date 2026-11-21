@@ -64,7 +64,8 @@ cp "$binary" "$stage/cli/swiftcheck"
 strip -rSTx "$stage/cli/swiftcheck"
 codesign --force --sign - "$stage/cli/swiftcheck" 2>/dev/null
 cli_zip="$dist/swiftcheck-$version-macos-arm64.zip"
-(cd "$stage/cli" && ditto -c -k --keepParent swiftcheck "$cli_zip")
+# The archive holds just `swiftcheck` (no folder, no AppleDouble `._` files).
+(cd "$stage/cli" && ditto -c -k --norsrc --noextattr swiftcheck "$cli_zip")
 
 # Artifact bundle for the SPM binary target.
 bundle="$stage/SwiftCheckBinary.artifactbundle"
@@ -88,7 +89,7 @@ cat > "$bundle/info.json" <<JSON
 }
 JSON
 bundle_zip="$dist/SwiftCheckBinary.artifactbundle.zip"
-(cd "$stage" && ditto -c -k --keepParent SwiftCheckBinary.artifactbundle "$bundle_zip")
+(cd "$stage" && ditto -c -k --norsrc --noextattr --keepParent SwiftCheckBinary.artifactbundle "$bundle_zip")
 
 bundle_checksum="$(swift package compute-checksum "$bundle_zip")"
 cli_sha="$(shasum -a 256 "$cli_zip" | cut -d' ' -f1)"
