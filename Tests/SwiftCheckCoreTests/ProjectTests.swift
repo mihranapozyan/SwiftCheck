@@ -58,7 +58,7 @@ private func violation(_ file: String, _ line: Int, _ text: String, rule: String
         let rules = config.ruleSet().rules
         #expect(!rules.contains { $0.rule.id == "bare-print" })
         #expect(rules.first { $0.rule.id == "force-unwrap" }?.severity == .error)
-        #expect(rules.count == RuleRegistry.all.count - 1)
+        #expect(rules.count == RuleRegistry.all.count { !$0.isOptIn } - 1)
     }
 
     @Test func parsesRuleList() throws {

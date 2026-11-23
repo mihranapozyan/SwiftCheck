@@ -19,6 +19,7 @@ import Foundation
 /// ```
 /// `rules` is either an object (`id` → `"warning"` | `"error"` | `"off"`, unlisted rules keep
 /// their defaults) or an array of ids (only these rules run, with default severities).
+/// Opt-in rules (`Rule.isOptIn`) are off unless listed in the array, or set to a severity / `"on"` in the object.
 public struct Configuration: Sendable, Equatable {
     public static let fileName = ".swiftcheck.json"
     public static let defaultBaseline = ".swiftcheck-baseline.json"
@@ -114,7 +115,10 @@ public struct Configuration: Sendable, Equatable {
             switch overrides[rule.id] {
             case .off: return nil
             case .on(let severity): return ConfiguredRule(rule, severity: severity)
-            case nil: return ConfiguredRule(rule)
+            case nil:
+                // Opt-in rules run only when named in the array form of `rules`.
+                if rule.isOptIn, onlyRules?.contains(rule.id) != true { return nil }
+                return ConfiguredRule(rule)
             }
         })
     }

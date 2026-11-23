@@ -110,23 +110,23 @@ private final class TempProject {
     }
 
     @Test func customRulesCanBeAddedAndConfigured() throws {
-        let noFatalError = Rule(
-            id: "no-fatal-error", severity: .warning, message: "fatalError crashes", description: "",
+        let noLegacy = Rule(
+            id: "no-legacy", severity: .warning, message: "legacy call", description: "",
             kinds: [.functionCallExpr],
             examples: RuleExamples(triggering: [], nonTriggering: []),
             check: { node, _ in
                 guard let call = node.as(FunctionCallExprSyntax.self),
-                      SyntaxHelpers.freeFunctionName(call) == "fatalError" else { return [] }
+                      SyntaxHelpers.freeFunctionName(call) == "legacy" else { return [] }
                 return [Finding(at: call.calledExpression)]
             }
         )
-        let temp = try TempProject(config: #"{"rules": {"no-fatal-error": "error"}}"#)
-        #expect(try Project(root: temp.root).unknownRuleIDs == ["no-fatal-error"])
+        let temp = try TempProject(config: #"{"rules": {"no-legacy": "error"}}"#)
+        #expect(try Project(root: temp.root).unknownRuleIDs == ["no-legacy"])
 
-        let project = try Project(root: temp.root, rules: RuleRegistry.all + [noFatalError])
+        let project = try Project(root: temp.root, rules: RuleRegistry.all + [noLegacy])
         #expect(project.unknownRuleIDs.isEmpty)
-        let result = project.check(sources: [SourceInput(path: "A.swift", text: "func f() { fatalError(\"x\") }\n")])
-        #expect(result.reported.map(\.rule) == ["no-fatal-error"])
+        let result = project.check(sources: [SourceInput(path: "A.swift", text: "func f() { legacy(1) }\n")])
+        #expect(result.reported.map(\.rule) == ["no-legacy"])
         #expect(result.reported.first?.severity == .error)
     }
 

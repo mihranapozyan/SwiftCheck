@@ -15,6 +15,24 @@ public enum RuleRegistry {
         .barePrint,
         .sensitiveLog,
         .secretInUserDefaults,
+        // Crashes and unsafe constructs
+        .fatalErrorCall,
+        .exitCall,
+        .mainSync,
+        .blockingInAsync,
+        .emptyCatch,
+        .unsafeBitCastCall,
+        // Merge leftovers and markers in comments
+        .conflictMarker,
+        .fixmeComment,
+        // Secrets
+        .hardcodedSecret,
+        // Opt-in rules
+        .todoComment,
+        .unownedReference,
+        .uncheckedSendable,
+        .discardedTry,
+        .insecureURL,
     ]
 
     public static func rule(withID id: String) -> Rule? {

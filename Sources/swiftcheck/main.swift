@@ -30,7 +30,8 @@ func run() -> Int32 {
     if options.version { output(SwiftCheck.version); return 0 }
     if options.listRules {
         for rule in RuleRegistry.all {
-            output("\(rule.id.padding(toLength: 24, withPad: " ", startingAt: 0)) \(rule.severity.rawValue.padding(toLength: 8, withPad: " ", startingAt: 0)) \(rule.description)")
+            let level = rule.isOptIn ? "opt-in" : "default"
+            output("\(rule.id.padding(toLength: 24, withPad: " ", startingAt: 0)) \(rule.severity.rawValue.padding(toLength: 8, withPad: " ", startingAt: 0)) \(level.padding(toLength: 8, withPad: " ", startingAt: 0)) \(rule.description)")
         }
         return 0
     }

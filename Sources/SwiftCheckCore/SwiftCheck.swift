@@ -8,5 +8,5 @@
 /// Library-wide constants.
 public enum SwiftCheck {
     /// Version of the library and the `swiftcheck` tool.
-    public static let version = "0.1.0"
+    public static let version = "0.2.0"
 }

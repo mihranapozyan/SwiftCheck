@@ -58,7 +58,7 @@ SwiftCheck. Options such as `--json`, `--include-baselined` or `--diff main` are
 Download the binary from the latest release:
 
 ```bash
-curl -fsSL -o swiftcheck.zip https://github.com/mihranapozyan/SwiftCheck/releases/download/0.1.0/swiftcheck-0.1.0-macos-arm64.zip
+curl -fsSL -o swiftcheck.zip https://github.com/mihranapozyan/SwiftCheck/releases/download/0.2.0/swiftcheck-0.2.0-macos-arm64.zip
 unzip swiftcheck.zip && sudo mv swiftcheck /usr/local/bin/ && rm swiftcheck.zip
 swiftcheck --version
 ```
@@ -92,6 +92,23 @@ Add this package and link the `SwiftCheckCore` product — see [Using as a libra
 | `bare-print` | warning | `print`, `debugPrint`, `dump` outside `#if DEBUG`. Decided from the syntax tree: `#if DEBUG && os(iOS)`, the `#else` branch of `#if !DEBUG` and nested conditions are understood. |
 | `sensitive-log` | error | Values named *token*, *password*, *passcode*, *pin*, *otp*, *cvv*, *secret* passed to `print`, `NSLog`, `os_log` or to a call on a receiver named `logger`, `log` or `*Logger`. |
 | `secret-in-userdefaults` | error | Writes of such values to `UserDefaults` (`set`, `setValue` on `UserDefaults` or `*defaults`) and `@AppStorage` properties. Reads and `removeObject` are allowed. |
+| `fatal-error` | warning | `fatalError(…)` and `preconditionFailure(…)`. Allowed in `init?(coder:)` / `required init(coder:)`, in declarations marked `@available(*, unavailable)`, in `default:` / `@unknown default:` branches and in `#if DEBUG`. `precondition`, `assert` and `assertionFailure` are never flagged. |
+| `exit-call` | warning | Free calls to `exit(…)` and `abort()`. Allowed in `main.swift`. |
+| `main-sync` | warning | `DispatchQueue.main.sync { }` and `.sync(execute:)`. `.async` and other queues are fine. |
+| `blocking-in-async` | warning | Inside `async` functions, initializers, accessors, `Task { }` / `Task.detached { }` closures and `async` closures: `Thread.sleep`, `sleep`, `usleep`, and `wait()` on a receiver whose name contains *semaphore* or *group*. Not excluded in `#if DEBUG`. |
+| `empty-catch` | warning | `catch { }` with an empty body. A comment inside the body counts as an explanation. |
+| `unsafe-bit-cast` | warning | `unsafeBitCast(…)` and `unsafeDowncast(…)`. |
+| `conflict-marker` | error | Merge conflict markers: lines starting with `<<<<<<< `, `||||||| ` or `>>>>>>> `, and a `=======` line after an opening marker. Reads the raw text, so it works when the file no longer parses. |
+| `fixme-comment` | warning | `FIXME` and `XXX` in comments, Xcode style: the upper-case marker must come right after the comment opener (`//`, `///`, `//!`, `/*`, `/**`, or a block-comment `*` line), then an optional `(owner)` and `:`. `// FIXME: x`, `// XXX(anna): x` match; `// FIXME x`, `// fixme: x`, `// See FIXME: below` and strings do not. |
+| `hardcoded-secret` | warning | String literals shaped like known keys (AWS `AKIA…`, GitHub `ghp_…` / `github_pat_…`, Anthropic `sk-ant-…`, OpenAI-style `sk-…`, Slack `xox…`, Google `AIza…`, PEM private keys), and literals of 8+ characters without whitespace or `://` assigned to a variable, property, parameter default or argument with a secret name. Placeholders (`""`, `<…>`, `YOUR_…`, `xxxx`, `••••`, `EXAMPLE`) are skipped. Not excluded in `#if DEBUG`. |
+| `todo-comment` | opt-in | `TODO` and `HACK` in comments, matched like `fixme-comment` (`// TODO: x`, `// HACK(anna): x`). |
+| `unowned-reference` | opt-in | `unowned` and `unowned(unsafe)` in declarations and closure capture lists. `weak` is fine. |
+| `unchecked-sendable` | opt-in | `@unchecked Sendable` conformances and `nonisolated(unsafe)`. |
+| `discarded-try` | opt-in | `try?` used as a standalone statement (result and error both dropped). Assignments, `if let`, `guard`, arguments, `return` and implicit returns are fine. |
+| `insecure-url` | opt-in | String literals starting with `http://`. Allowed: `localhost`, `127.0.0.1`, `[::1]`, `0.0.0.0`, `*.local` and well-known XML namespaces (`www.w3.org`, `schemas.…`, `purl.org`, `ns.adobe.com`, `www.apple.com/DTDs`). |
+
+Rules marked **opt-in** are off by default because legitimate uses are common. Enable them in
+`.swiftcheck.json` (see [Opt-in rules](#opt-in-rules)). `swiftcheck --list-rules` shows which is which.
 
 Code inside `#Preview { … }` and types conforming to `PreviewProvider` is skipped by all rules.
 
@@ -148,12 +165,30 @@ Without a config the current directory is the root and all rules run with defaul
 | `include` | Paths or globs relative to the root. If present, only matching files are checked. |
 | `exclude` | Paths or globs to skip. |
 | `baseline` | Baseline file path relative to the root. Default `.swiftcheck-baseline.json`. |
-| `rules` | Either an object `id → "warning" \| "error" \| "off"` (unlisted rules keep defaults) or an array of ids (only these rules run). |
+| `rules` | Either an object `id → "warning" \| "error" \| "on" \| "off"` (unlisted rules keep defaults) or an array of ids (only these rules run, opt-in ones included). |
 
 Globs: `*` matches within one path component, `?` one character, `**` any number of components.
 A pattern also matches everything below a matching folder, so `Pods` and `**/Generated` exclude
 whole directories. `.build`, `.swiftpm`, `DerivedData`, `Pods`, `Carthage`, `node_modules` and
 hidden folders are never scanned by `--all`.
+
+### Opt-in rules
+
+Opt-in rules (`todo-comment`, `unowned-reference`, `unchecked-sendable`, `discarded-try`, `insecure-url`)
+don't run with an empty config, with `{}` or with a config that doesn't mention them. Enable one with a
+severity or `"on"` (the rule's own severity), or list it in the array form of `rules`:
+
+```json
+{
+  "rules": {
+    "todo-comment": "warning",
+    "insecure-url": "error",
+    "discarded-try": "on"
+  }
+}
+```
+
+`"off"` keeps a rule disabled. Library users can check `Rule.isOptIn`.
 
 ## Baseline
 
@@ -242,7 +277,7 @@ in-process.
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/mihranapozyan/SwiftCheck.git", exact: "0.1.0"),
+    .package(url: "https://github.com/mihranapozyan/SwiftCheck.git", exact: "0.2.0"),
 ],
 targets: [
     .target(name: "MyTool", dependencies: [.product(name: "SwiftCheckCore", package: "SwiftCheck")]),
@@ -338,15 +373,22 @@ Sources/
     Project/    Project, CheckResult, CheckOptions, SourceInput — the public entry point
     Engine/     Rule, RuleSet, SourceChecker (single-pass visitor), Linter (parallel), DebugCondition
     Rules/      one file per rule + RuleRegistry
-    Support/    Configuration, Baseline, Glob, FileCollector, Git, Report, SyntaxHelpers
+    Support/    Configuration, Baseline, Glob, FileCollector, Git, Report, SyntaxHelpers, MarkerMatcher
   swiftcheck/   CLI: argument parsing and output on top of Project
 Tests/SwiftCheckCoreTests/
 ```
 
 - `SourceChecker` parses a file and walks it once with a `SyntaxAnyVisitor`. A `RuleSet` holds a
   table `SyntaxKind → [rule]`; each node is handed only to the rules registered for its kind.
-- The traversal context (`inDebug`, `inPreview`) lives on a stack: it is pushed when entering an
-  `#if` clause and restored when leaving it. Preview declarations are not descended into.
+- Rules have three kinds of triggers: syntax nodes, comments and the raw source. Comment rules get every
+  comment from token trivia; tokens are visited only when a comment rule is active (or the file contains an
+  ignore comment), so files checked by syntax rules alone cost the same as before. Source rules get the
+  file's bytes and line starts once, independent of the parser.
+- The traversal context (`inDebug`, `inPreview`, `inAsync`) lives on a stack: it is pushed when entering an
+  `#if` clause or a function-like scope and restored when leaving it. Preview declarations are not
+  descended into.
+- Findings from all three triggers go through the same resolution: ignore comments, de-duplication,
+  `lineText` for the baseline.
 - `Linter` runs `SourceChecker` for each file with `DispatchQueue.concurrentPerform`.
 - `Project` ties configuration, file selection, `Linter` and the baseline together. The CLI is a thin
   layer over it, so the tool and embedding apps behave identically.
@@ -354,6 +396,17 @@ Tests/SwiftCheckCoreTests/
   contain the marker at all), so a marker inside a string literal is not a suppression.
 
 ## Adding a rule
+
+A rule subscribes to one of three triggers; pick the cheapest that fits:
+
+| Trigger | Initializer | Use for |
+|---|---|---|
+| syntax | `Rule(…, kinds:, examples:, check:)` | anything about code structure |
+| comments | `Rule(…, examples:, comments:)` | text in comments (`FIXME`); receives each `Comment` (kind, text, position) |
+| source | `Rule(…, examples:, source:)` | raw text that may not parse (merge conflict markers); receives `SourceText` (bytes, line starts) once per file |
+
+All initializers take `isOptIn: true` to make the rule off by default. Syntax and comment rules get a
+`RuleContext` with `inDebug`, `inAsync` and `fileName`.
 
 Built-in rules live in this package; tools that embed `SwiftCheckCore` can also pass their own rules
 to `Project(root:rules:)` (`RuleRegistry.all + [myRule]`) and configure them in `.swiftcheck.json` like
@@ -391,6 +444,24 @@ extension Rule {
 2. Add it to `RuleRegistry.all`.
 3. Run `swift test`. Every triggering example must produce violations exactly at the `↓`
    markers and every non-triggering example must produce none — the examples are the tests.
+
+A comment rule looks like this (the finding is positioned inside the comment, so ignore comments and the
+baseline work as usual):
+
+```swift
+extension Rule {
+    public static let noNote = Rule(
+        id: "no-note",
+        severity: .warning,
+        message: "NOTE comment",
+        description: "Flags NOTE: comments.",
+        examples: RuleExamples(triggering: ["// ↓NOTE: x"], nonTriggering: ["// note: x"]),
+        comments: { comment, _ in
+            comment.text.range(of: "NOTE:").map { _ in [Finding(comment.position)] } ?? []
+        }
+    )
+}
+```
 
 Guidelines: keep `check` cheap and local to the node (look at children and a few parents, don't
 walk the whole file); use `context.inDebug` instead of searching for `#if` yourself; return a
